@@ -1,0 +1,25 @@
+name: Protocol Doc Guard
+
+on:
+  pull_request:
+    paths:
+      - 'src/main/java/**'
+      - 'docs/protocol-spec.md'
+      - 'docs/protocol-conformance-spec.md'
+      - 'scripts/ci/check-protocol-docs.sh'
+      - '.github/workflows/protocol-doc-guard.yml'
+
+jobs:
+  check-protocol-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ensure base ref is available
+        run: git fetch origin "${{ github.base_ref }}" --depth=1
+
+      - name: Verify protocol docs are updated when required
+        run: bash scripts/ci/check-protocol-docs.sh "origin/${{ github.base_ref }}"

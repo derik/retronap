@@ -1,0 +1,10 @@
+logging:
+  level:
+    com.deriklima.retronap: DEBUG
+    org.flywaydb.core.internal.scanner.classpath.ClassPathScanner: ERROR
+
+retronap:
+  metaserver:
+    # If the clients are running on other machines or VMs
+    # the IP must be the one in the local network
+    server-list: 127.0.0.1:8888

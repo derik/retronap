@@ -1,0 +1,42 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: retronap
+      POSTGRES_USER: retronap
+      POSTGRES_PASSWORD: pg_password
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U retronap -d retronap" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    image: derikjl/retronap:0.0.1-alpha
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/retronap
+      SPRING_DATASOURCE_USERNAME: retronap
+      SPRING_DATASOURCE_PASSWORD: pg_password
+      RETRONAP_METASERVER_SERVERLIST: 127.0.0.1:8888
+      BPL_JVM_THREAD_COUNT: 50
+    ports:
+      - "8888:8888"
+      - "8875:8875"
+    deploy:
+      resources:
+        limits:
+          cpus: 1
+          memory: 512M
+        reservations:
+          cpus: '0.50'
+          memory: 512M
+
+volumes:
+  db_data:

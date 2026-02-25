@@ -1,0 +1,38 @@
+spring:
+  application:
+    name: retronap
+    version: 0.1.0-SNAPSHOT
+  main:
+    web-application-type: none
+  datasource:
+    url: jdbc:postgresql://localhost:5433/retronap
+    driver-class-name: org.postgresql.Driver
+    username: user
+    password: password
+  flyway:
+    locations: classpath:db/migration
+  jpa:
+    hibernate.ddl-auto: validate
+    show-sql: true
+  jmx:
+    enabled: false
+
+logging:
+  level:
+    com.deriklima.retronap: DEBUG
+
+retronap:
+  server:
+    enabled: true
+    port: 8888
+    max-connections: 5000
+    session-timeout: 600
+  metaserver:
+    enabled: true
+    port: 8875
+    # If the clients are running on other machines or VMs
+    # the IP must be the one in the local network
+    server-list: 127.0.0.1:8888
+  path-config:
+    motd: configs/motd.txt
+    channels: configs/channels.txt

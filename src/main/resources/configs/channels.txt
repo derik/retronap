@@ -1,0 +1,16 @@
+# Permanent channels
+#
+# Format:
+# channel_name channel_user_limit required_user_level
+#
+# channel_name = may be double-quoted if you like, but it cannot contain spaces.
+#
+# channel_user_limit = if 0, no limit will be enforced.
+# 
+# required_user_level = must correspond to user level strings; 
+#                       see comments in the user file.
+
+General 0 user
+ModeratorsOnly 0 moderator
+AdminsOnly 0 admin
+EliteOnly 0 elite

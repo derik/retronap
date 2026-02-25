@@ -1,0 +1,9 @@
+services:
+  postgres:
+    image: 'postgres:16-alpine'
+    environment:
+      - 'POSTGRES_DB=retronap'
+      - 'POSTGRES_PASSWORD=password'
+      - 'POSTGRES_USER=retronap'
+    ports:
+      - '5432:5432'

@@ -1,0 +1,2 @@
+./gradlew clean build bootBuildImage --imageName=derikjl/retronap:0.0.1-alpha
+docker push derikjl/retronap:0.0.1-alpha
