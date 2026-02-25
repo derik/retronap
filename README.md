@@ -50,6 +50,46 @@ Stop:
 docker compose -f docker/compose.yaml down
 ```
 
+## Hosts File Setup (Required for Napster Client)
+
+To make the Napster 2.0 Beta 6 client connect to your RetroNap server, you need to edit the OS hosts file and map Napster hostnames to your RetroNap server IP.
+
+Example entries (replace `192.168.1.50` with your RetroNap server IP):
+
+```text
+192.168.1.50 server.napster.com
+192.168.1.50 napster.com
+```
+
+### Windows 98 SE example
+
+Hosts file location:
+
+- `C:\WINDOWS\HOSTS`
+
+Steps:
+
+1. Open `C:\WINDOWS\HOSTS` in a text editor.
+2. Add the mapping lines shown above.
+3. Save the file and start the client.
+
+Important note for Windows 98 SE:
+The Napster client may overwrite/revert hosts file changes when it starts. For workaround details, see:
+
+- https://deriklima.com/projects/retronap/
+
+### Windows XP example
+
+Hosts file location:
+
+- `C:\WINDOWS\system32\drivers\etc\hosts`
+
+Steps:
+
+1. Open the file as Administrator.
+2. Add the mapping lines shown above.
+3. Save and restart the Napster client.
+
 ## Local Development Setup
 
 ### 1. Start PostgreSQL with Compose
