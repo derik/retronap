@@ -4,6 +4,8 @@ RetroNap is a Napster server implementation focused on compatibility with the le
 
 This project is **not** a general-purpose Napster/OpenNap server for multiple client generations.
 
+[![Java CI with Gradle](https://github.com/derik/retronap/actions/workflows/gradle.yml/badge.svg)](https://github.com/derik/retronap/actions/workflows/gradle.yml)
+
 ## Client Compatibility
 
 RetroNap currently targets only:
