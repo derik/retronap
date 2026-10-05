@@ -3,14 +3,14 @@ package com.deriklima.retronap.search;
 import com.deriklima.retronap.model.SearchResult;
 import com.deriklima.retronap.model.SharedFile;
 import com.deriklima.retronap.model.User;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -41,10 +41,7 @@ public class SharedFileService {
   }
 
   public List<SharedFile> search(String input) {
-    // Replace spaces with OR operators for tsquery and add :* at the end of every token
-    String tsQuery = input.trim().replaceAll("\\s+", ":* | ") + ":*";
-    log.info("tsQuery: {}", tsQuery);
-    return sharedFileRepository.searchByTokens(tsQuery);
+    return searchByTokens(input);
   }
 
   public Long countByUserId(UUID userId) {
@@ -52,9 +49,7 @@ public class SharedFileService {
   }
 
   public List<SearchResult> searchWithParams(NewSearchParameters params) {
-    String tsQuery = params.getSearchToken().trim().replaceAll("\\s+", ":* | ") + ":*";
-    log.info("tsQuery: {}", tsQuery);
-    return sharedFileRepository.searchByTokens(tsQuery).stream()
+    return searchByTokens(params.getSearchToken()).stream()
         .map(
             sharedFile -> {
               User user = sharedFile.getUser();
@@ -62,5 +57,21 @@ public class SharedFileService {
                   sharedFile, user.getNickname(), user.getIpAddress(), user.getLinkSpeedValue());
             })
         .toList();
+  }
+
+  /** Matches any whitespace-separated term as a case-insensitive filename substring. */
+  private List<SharedFile> searchByTokens(String input) {
+    String normalized = input == null ? "" : input.trim();
+    if (normalized.isEmpty()) {
+      return List.of();
+    }
+
+    Map<UUID, SharedFile> matches = new LinkedHashMap<>();
+    for (String token : normalized.split("\\s+")) {
+      sharedFileRepository
+          .findByFilenameContainingIgnoreCase(token)
+          .forEach(file -> matches.putIfAbsent(file.getId(), file));
+    }
+    return List.copyOf(matches.values());
   }
 }

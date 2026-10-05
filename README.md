@@ -25,32 +25,73 @@ Client download:
 - MOTD, channels, private messaging, hotlist
 - Share, browse, and search flows
 - Download/upload coordination messages
-- PostgreSQL-backed persistence (users, shares, channels, etc.)
+- Persistent embedded H2 database (users, shares, channels, etc.)
 
 ## Requirements
 
 - Java `25`
-- Docker and Docker Compose (for containerized setup)
-- PostgreSQL `16` (if running outside Docker)
+- Docker and Docker Compose (only for building and running the container image)
 
-## Quick Start (Full Docker Compose Stack)
+## Quick Start (Local)
 
-This starts both PostgreSQL and RetroNap server containers:
+From the repository root, start the server:
+
+```bash
+./gradlew bootRun
+```
+
+H2 creates `./data/retronap.mv.db` on first startup. Flyway initializes the schema and
+Hibernate validates it. No database service or storage profile is needed.
+
+Default ports:
+
+- `8888` (RetroNap server)
+- `8875` (metaserver)
+
+Stop the server with `Ctrl+C`. Restarting it uses the same database file.
+
+## Docker Setup
+
+Run these commands from the repository root. Build the image from the current source
+before starting Compose:
+
+```bash
+./gradlew bootBuildImage
+mkdir -p data
+```
+
+The image runs as a non-root user. On Linux, make the data directory and any existing
+database files writable by that user. Obtain its IDs from the image you just built:
+
+```bash
+RETRONAP_CONTAINER_UID=$(docker run --rm --entrypoint id derikjl/retronap:0.0.1-alpha -u)
+RETRONAP_CONTAINER_GID=$(docker run --rm --entrypoint id derikjl/retronap:0.0.1-alpha -g)
+sudo chown -R "$RETRONAP_CONTAINER_UID:$RETRONAP_CONTAINER_GID" data
+```
+
+If using Docker Desktop, ensure the repository directory is available for bind mounts
+and writable from the container. Compose requires `data` to exist; it does not create
+a root-owned directory automatically.
+
+Start the application container:
 
 ```bash
 docker compose -f docker/compose.yaml up -d
 ```
 
-Exposed ports:
+Compose uses the locally built image and exposes ports `8888` and `8875`. It mounts
+`./data` from the repository at `/var/lib/retronap`, where H2 creates `retronap.mv.db`.
+The file survives container removal and recreation. The H2 credential variables
+listed below are also passed through to the container.
 
-- `8888` (RetroNap server)
-- `8875` (metaserver)
-
-Stop:
+Stop the container:
 
 ```bash
 docker compose -f docker/compose.yaml down
 ```
+
+Local and Docker startup use the same file by default. Stop one before starting the
+other, and adjust file ownership back to your local user if necessary.
 
 ## Hosts File Setup (Required for Napster Client)
 
@@ -94,17 +135,7 @@ Steps:
 
 ## Local Development Setup
 
-### 1. Start PostgreSQL with Compose
-
-Use the root Compose file to start only the database:
-
-```bash
-docker compose up -d
-```
-
-By default this exposes Postgres on `localhost:5432`.
-
-### 2. Run the server with Gradle
+Run the server with Gradle:
 
 ```bash
 ./gradlew bootRun
@@ -115,33 +146,44 @@ Default RetroNap server settings come from `src/main/resources/application.yml`:
 - server port: `8888`
 - metaserver port: `8875`
 
-## Local DB Config Note
+## Database Configuration
 
-`application.yml` points to:
+H2 is the only supported database. Configure it with:
 
-- `jdbc:postgresql://localhost:5433/retronap`
-- username: `user`
-- password: `password`
+| Environment variable | Default | Meaning |
+| --- | --- | --- |
+| `RETRONAP_FILE_DATABASE` | `./data/retronap` | Local database basename, without `.mv.db` |
+| `RETRONAP_FILE_DATABASE_USERNAME` | `sa` | H2 database user |
+| `RETRONAP_FILE_DATABASE_PASSWORD` | empty | H2 database password |
 
-The root `compose.yaml` uses:
-
-- `localhost:5432`
-- username: `retronap`
-- password: `password`
-
-So for local development, either:
-
-1. Override Spring datasource settings with environment variables, or
-2. Update `application.yml` for your local DB values.
-
-Example override:
+Relative paths are resolved from the process working directory. An absolute path is
+useful when launching from different directories. The parent directory must be writable
+by the application user. For example, after preparing the directory:
 
 ```bash
-SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5432/retronap \
-SPRING_DATASOURCE_USERNAME=retronap \
-SPRING_DATASOURCE_PASSWORD=password \
+RETRONAP_FILE_DATABASE=/var/lib/retronap/retronap \
 ./gradlew bootRun
 ```
+
+This creates `/var/lib/retronap/retronap.mv.db`. Credentials initialize a new database;
+when reopening an existing file, supply its existing credentials. Changing the environment
+variables does not change credentials stored in that file.
+
+Only one application process may open a database file at a time. H2 runs embedded,
+without a database server or automatic mixed mode. File databases created by the earlier
+H2 configuration remain usable at the same path, with their migration history preserved.
+
+### Backup and Restore
+
+Stop the application before copying or replacing the database file. For the default
+location, copy `data/retronap.mv.db` to your backup location. Keep its credentials with
+your deployment configuration. To restore, stop the application, copy the backup back to
+the configured basename plus `.mv.db`, and ensure the application user can read and write
+the file and its parent directory before restarting.
+
+Normal startup and container recreation retain stored records. Session cleanup still
+removes a disconnecting user's shared-file records according to the protocol lifecycle.
+Database files and H2 diagnostic files are ignored by Git.
 
 ## Building
 
@@ -149,6 +191,21 @@ Build and run tests:
 
 ```bash
 ./gradlew clean build
+```
+
+Most tests use isolated in-memory H2 databases with the production migrations from
+`db/migration` and Hibernate schema validation. File-database tests use temporary
+directories to verify persistence after reopening and migration compatibility. Tests
+do not touch the local database or require Docker. To run only tests:
+
+```bash
+./gradlew test
+```
+
+Check Java formatting:
+
+```bash
+./gradlew spotlessCheck
 ```
 
 Build container image with Spring Boot:

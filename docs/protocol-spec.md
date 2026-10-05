@@ -131,10 +131,20 @@ Important:
 4. Server sends zero or more `201` results.
 5. Server always ends with `202`.
 
+Filename matching:
+- Search text from the filename clauses is split on whitespace.
+- A file matches when any term occurs anywhere in its filename, ignoring case (OR semantics).
+- Matching uses the filename, not its directory or full path. `%` and `_` are literal characters.
+- Each shared-file record is returned at most once, even when multiple terms match it.
+- Blank search text produces no `201` messages, followed by `202`.
+- Result ordering is unspecified. `MAX_RESULTS` is parsed and normalized to at most 100,
+  but the current query and response loop do not enforce that limit; all matches are returned.
+- Parsed `LINESPEED` and `BITRATE` fields currently do not filter matches.
+
 ## Validation and Compatibility Notes
 - Message validity is enforced using token counts in `MessageTypes`.
 - Message types marked with `VARIABLETOKENS` bypass fixed token-count checks.
-- Search currently centers on filename token matching; some parsed optional operators are placeholders in current code.
+- Search uses case-insensitive filename substring matching as described in Flow E; parsed optional filters remain placeholders.
 - `docs/napster.txt` includes broader protocol surface than currently implemented.
 
 ## Testing Coverage Map

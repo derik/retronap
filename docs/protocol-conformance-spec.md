@@ -123,7 +123,12 @@ Use these status tags when planning tests:
 4. `200 CLIENT_SEARCH_REQUEST` (`Implemented` via new handler)
 - Parses `FILENAME ...`, `MAX_RESULTS`, optional `LINESPEED`, `BITRATE`
 - Emits zero or more `201` results then always `202`
-- `MAX_RESULTS` is capped to 100
+- Splits combined filename-clause text on whitespace; any term may match a case-insensitive substring of the filename
+- Matches the filename only, with literal `%` and `_` characters; directory and full path are not searched
+- Deduplicates by shared-file ID, including when terms repeat or several terms match one file
+- Blank search text and no matches emit only `202`; result ordering is unspecified
+- `MAX_RESULTS` is normalized to at most 100 during parsing but is not enforced on returned results
+- Parsed `LINESPEED` and `BITRATE` values/operators currently do not filter results
 
 5. `215 CLIENT_RESUME_REQUEST` (`Implemented`)
 - Emits zero or more `216` then `217`
@@ -219,7 +224,7 @@ Use these status tags when planning tests:
 2. `300 CLIENT_CHECK_PORT` is routed to `IgnoreCommandHandler` and currently no-op (`Stub`).
 3. Some token-map entries are missing for constants that exist (`Unrouted` or legacy).
 4. `11` check-pass behavior has TODO about exact protocol semantics.
-5. Search parameter operators are parsed but not all operators materially affect query execution.
+5. Search parameters `MAX_RESULTS`, `LINESPEED`, and `BITRATE` are parsed but do not restrict returned results.
 
 ## Conformance Test Expansion Matrix
 
@@ -240,7 +245,10 @@ Legend:
 - `Now`: `870` quoted filenames with spaces
 - `Now`: `870` invalid tuple count -> `404`
 - `Now`: `200` search no hits -> only `202`
-- `Next`: `MAX_RESULTS` cap behavior
+- `Now`: case-insensitive substring and multi-term OR matching, with one result per shared-file ID
+- `Now`: literal `%`/`_` searches and blank search -> only `202`
+- `Now`: results precede `202`, with no unexpected `0`/`404` errors
+- `Now`: all matching results are returned even when the count exceeds `MAX_RESULTS`
 - `Next`: malformed search request tokenization error
 
 3. Hotlist

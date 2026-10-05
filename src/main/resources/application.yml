@@ -5,13 +5,15 @@ spring:
   main:
     web-application-type: none
   datasource:
-    url: jdbc:postgresql://localhost:5433/retronap
-    driver-class-name: org.postgresql.Driver
-    username: user
-    password: password
+    # Database basename; H2 adds the .mv.db extension.
+    url: jdbc:h2:file:${RETRONAP_FILE_DATABASE:./data/retronap}
+    driver-class-name: org.h2.Driver
+    username: ${RETRONAP_FILE_DATABASE_USERNAME:sa}
+    password: ${RETRONAP_FILE_DATABASE_PASSWORD:}
   flyway:
     locations: classpath:db/migration
   jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
     hibernate.ddl-auto: validate
     show-sql: true
   jmx:

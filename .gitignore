@@ -36,3 +36,11 @@ out/
 ### VS Code ###
 .vscode/
 .gradle-home/
+
+/data/
+*.mv.db
+*.trace.db
+*.lock.db
+*.temp.db
+*.mv.db.tempFile
+*.mv.db.newFile

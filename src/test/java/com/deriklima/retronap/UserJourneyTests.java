@@ -29,13 +29,13 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Import;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
 @SpringBootTest
-@Import(TestcontainersConfiguration.class)
+@ActiveProfiles("test")
 class UserJourneyTests {
   private static final int TEST_SERVER_PORT = findAvailablePort();
   private static final String DEFAULT_PASSWORD = "testpassword";
@@ -334,6 +334,40 @@ class UserJourneyTests {
       Message end = readNextOfType(client, MessageTypes.SERVER_END_SEARCH_RESULTS, 30);
       assertNotNull(end);
       assertNoMessageOfType(client, MessageTypes.SERVER_SEARCH_RESPONSE, 500);
+    }
+  }
+
+  @Test
+  void substringSearchDeduplicatesResultsAndTerminatesIncludingBlankAndLiteralQueries()
+      throws Exception {
+    String nick = uniqueNick("h2search");
+    upsertUser(nick, DEFAULT_PASSWORD, UserLevelTypes.USER, UserLinkTypes.T1);
+
+    try (TestClient client = connectClient()) {
+      loginAndDrainMotd(client, nick, DEFAULT_PASSWORD);
+      send(
+          client,
+          MessageTypes.CLIENT_DIR_SHARE_NOTIFICATION,
+          "C:\\H2\\ \"H2Sunshine.mp3\" 11111111111111111111111111111111 1000 128 44100 120"
+              + " \"H2Moonlight.mp3\" 22222222222222222222222222222222 1000 128 44100 120"
+              + " \"H2Literal%_Live.mp3\" 33333333333333333333333333333333 1000 128 44100 120");
+      send(
+          client,
+          MessageTypes.CLIENT_SEARCH_REQUEST,
+          "FILENAME CONTAINS \"SHINE h2moon shine\" MAX_RESULTS 1");
+
+      List<String> paths = readSearchResults(client).stream().map(m -> m.getDataString(0)).toList();
+      assertEquals(2, paths.size());
+      assertTrue(paths.contains("C:\\H2\\H2Sunshine.mp3"));
+      assertTrue(paths.contains("C:\\H2\\H2Moonlight.mp3"));
+
+      send(client, MessageTypes.CLIENT_SEARCH_REQUEST, "FILENAME CONTAINS \"   \" MAX_RESULTS 10");
+      assertTrue(readSearchResults(client).isEmpty());
+
+      send(client, MessageTypes.CLIENT_SEARCH_REQUEST, "FILENAME CONTAINS \"%_\" MAX_RESULTS 10");
+      List<Message> literalResults = readSearchResults(client);
+      assertEquals(1, literalResults.size());
+      assertEquals("C:\\H2\\H2Literal%_Live.mp3", literalResults.getFirst().getDataString(0));
     }
   }
 
@@ -866,6 +900,28 @@ class UserJourneyTests {
       }
     }
     throw new AssertionError("Did not receive terminator message type " + terminatorType);
+  }
+
+  private List<Message> readSearchResults(TestClient client) throws IOException {
+    List<Message> results = new ArrayList<>();
+    for (int i = 0; i < 40; i++) {
+      Message message = readNext(client);
+      if (message.getType() == MessageTypes.SERVER_END_SEARCH_RESULTS) {
+        assertEquals("", message.getDataString());
+        return results;
+      }
+      if (message.getType() == MessageTypes.SERVER_SEARCH_RESPONSE) {
+        assertEquals(9, message.numDataStringTokens());
+        results.add(message);
+      } else {
+        // Login can leave additional MOTD lines queued before the first search response.
+        assertTrue(
+            message.getType() == MessageTypes.SERVER_STATS
+                || message.getType() == MessageTypes.MESSAGE_OF_THE_DAY,
+            "Unexpected search response: " + message);
+      }
+    }
+    throw new AssertionError("Search did not terminate with 202");
   }
 
   private boolean waitForBrowseHit(TestClient requester, String targetNick, String file)
