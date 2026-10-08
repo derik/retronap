@@ -148,6 +148,15 @@ Filename matching:
 - `docs/napster.txt` includes broader protocol surface than currently implemented.
 
 ## Testing Coverage Map
+
+The opt-in external client in `scripts/loadtest/retronap_load.py` exercises the
+existing wire behavior against an already running server. It is not invoked by
+normal builds. It uses nickname checks (`7`), alt registration/login (`6`) for
+new accounts, normal login (`2`) for existing accounts, directory shares (`870`),
+search, browse, hotlist, and channel/private messages. See
+[`load-testing.md`](load-testing.md) for parameters and assertions. No new wire
+messages or server behavior are introduced by this client.
+
 `UserJourneyTests` currently covers:
 - Login and MOTD.
 - Full channel list request/response.

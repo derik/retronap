@@ -294,6 +294,33 @@ Legend:
 - `Later`: abrupt client disconnect cleanup (shares removed)
 
 ## Suggested Test Organization
+
+### Opt-in external workload checks
+
+`scripts/loadtest/retronap_load.py` connects to an already running server; it is
+not part of Gradle's test/build lifecycle. The checks preserve the contracts above:
+
+- Registration checks nickname availability (`7` -> `8`); `9` fails create mode.
+- Both registration/login paths require `3` before at least one `621`.
+- `870` batches obey the 16-bit framing limit. A subsequent same-session browse
+  verifies the advertised count and the `213 <nick>` terminator.
+- Search counts every `201` until `202`. Default generated-catalogue searches
+  expect all matching files, including counts above the requested `MAX_RESULTS`.
+- Asynchronous MOTD, `214` stats, presence and broadcasts may interleave.
+- Hotlist checks `301` after `208`, sends `303`, then awaits `827` completion as
+  an ordering barrier. It does not redefine presence-notification semantics.
+- Channel join requires `405` and `410` before `409`. Chat/private-message
+  workloads check delivery of their specific generated messages.
+- Server `0`/`404`/`302` errors, premature disconnects, truncated frames, missing
+  completion markers, and count mismatches fail the workload.
+
+These are bounded workload assertions, not additional server guarantees or an
+exhaustive conformance suite. Socket closure is performed by the client; database
+cleanup is not directly asserted. See [`load-testing.md`](load-testing.md) for
+the on-demand commands, lifecycle, persistence side effects and limitations.
+
+### Integration test organization
+
 1. `AuthFlowsIT`
 2. `ShareSearchFlowsIT`
 3. `HotlistFlowsIT`

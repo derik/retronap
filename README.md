@@ -218,6 +218,25 @@ Default image tag is configured in `build.gradle` as:
 
 - `derikjl/retronap:0.0.1-alpha`
 
+## On-Demand Load Tests
+
+Simulate users against an already running native, JAR, or container server with
+Python 3.11+ (no extra packages):
+
+```bash
+python3 scripts/loadtest/retronap_load.py --host 127.0.0.1 --port 8888 \
+  --scenario mixed --users 5 --files 100 --duration 60 \
+  --output build/loadtest/mixed.json
+```
+
+These workloads run only when explicitly invoked; they are not part of Gradle
+`test`, `check`, `build`, or CI. They create persistent synthetic accounts by
+default, so use a benchmark server/database. See [the load-testing guide](docs/load-testing.md)
+for idle/share/search/browse/hotlist/chat scenarios, reusable accounts, repeated
+cycles, slow readers, parameters, and memory-measurement examples. The guide also
+includes an opt-in native benchmark runner that starts isolated servers, samples
+Linux process memory, and generates an HTML report.
+
 ## Configuration Files
 
 - `src/main/resources/application.yml`: main runtime config
