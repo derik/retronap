@@ -10,20 +10,21 @@ import lombok.extern.slf4j.Slf4j;
 
 /** A queue for outbound messages, so threads don't contend over the OutputStream */
 @Slf4j
-public class OutboundMessageQueue extends Thread {
+public class OutboundMessageQueue {
 
   private final BlockingQueue<Message> queue = new LinkedBlockingQueue<>();
   private volatile boolean running = false;
   private volatile boolean invalidated = false;
+  private Thread writer;
   private final OutputStream os;
-  private final int timeoutMs;
+  private final long timeoutMs;
 
   public OutboundMessageQueue(OutputStream os, int timeoutSeconds) {
-    this.timeoutMs = timeoutSeconds > 0 ? timeoutSeconds * 1000 : 0;
+    this.timeoutMs = timeoutSeconds > 0 ? timeoutSeconds * 1000L : 0;
     this.os = new BufferedOutputStream(os);
   }
 
-  public void queueMessage(Message m) throws InvalidatedQueueException {
+  public synchronized void queueMessage(Message m) throws InvalidatedQueueException {
     if (isInvalid()) {
       throw new InvalidatedQueueException("Queue has been invalidated");
     }
@@ -32,9 +33,7 @@ public class OutboundMessageQueue extends Thread {
     }
   }
 
-  @Override
-  public void run() {
-    running = true;
+  private void run() {
     try (os) {
       while (running) {
         try {
@@ -67,24 +66,29 @@ public class OutboundMessageQueue extends Thread {
       }
     } catch (IOException e) {
       log.error("Error closing output stream", e);
+    } finally {
+      invalidate();
     }
   }
 
-  public void startQueue() {
-    if (!running) {
-      start();
+  public synchronized void startQueue() {
+    if (writer == null && !invalidated) {
+      running = true;
+      writer = Thread.ofVirtual().name("retronap-outbound").unstarted(this::run);
+      writer.start();
     }
   }
 
-  public void stopQueue() {
-    if (running) {
-      running = false;
-      this.interrupt();
+  public synchronized void stopQueue() {
+    running = false;
+    invalidated = true;
+    queue.clear();
+    if (writer != null) {
+      writer.interrupt();
     }
   }
 
   public void invalidate() {
-    invalidated = true;
     stopQueue();
   }
 

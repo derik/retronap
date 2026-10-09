@@ -1,6 +1,7 @@
 package com.deriklima.retronap.hotlist;
 
 import com.deriklima.retronap.message.*;
+import com.deriklima.retronap.session.SessionEvent;
 import com.deriklima.retronap.session.SessionManager;
 import com.deriklima.retronap.user.UserNotFoundException;
 import java.util.List;
@@ -8,6 +9,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 /** Handles msgs relating to hotlists */
@@ -27,6 +29,16 @@ public class HotlistHandler extends MessageHandler {
     this.hotlist = hotlist;
     addPreConditionChecker(new ValidMessageChecker());
     addPreConditionChecker(new UserLoggedInChecker());
+  }
+
+  @EventListener
+  public void handleSessionEvent(SessionEvent event) {
+    if (event.getType() == SessionEvent.TERMINATE) {
+      UUID userId = event.getSession().getUserId();
+      if (userId != null) {
+        hotlistCreateLoopState.remove(userId);
+      }
+    }
   }
 
   protected void processMessage(Message m, MessageContext session) {

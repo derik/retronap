@@ -35,6 +35,9 @@ Use these status tags when planning tests:
   - User removed from channels
   - Shared files deleted by user id
   - Hotlist signoff notifications (`210`) emitted
+  - Periodic statistics task cancelled and its callback removed from the timer
+  - Outbound queue invalidated; pending packets released and new sends rejected
+  - Transient hotlist-create loop-detection state released for the user
 
 ## Global Validation and Error Semantics
 
@@ -66,7 +69,7 @@ Use these status tags when planning tests:
   - sets authenticated user state
   - replies `3 <email>`
   - sends MOTD (`621` one or more)
-  - starts periodic stats thread (`214`)
+  - schedules periodic stats (`214`) on the shared server timer
   - emits session sign-on event
 - Failure:
   - replies `0 Login error.(no account or bad password)`
@@ -101,7 +104,9 @@ Use these status tags when planning tests:
 - Source: configured MOTD file, with fallback default line
 
 2. `214 SERVER_STATS` (`Implemented`)
-- Sent periodically by status thread after login
+- Sent on the shared server timer: first update after 60 seconds, then every 60 seconds
+- Repeated start/MOTD calls do not duplicate the session's scheduled task
+- Cancelling one session's task does not interrupt updates for other sessions
 - Payload: `<users> <files> <sizeGb>`
 
 ## Sharing and Search
@@ -146,6 +151,8 @@ Use these status tags when planning tests:
 - Unknown nick emits `302 <nick>`
 - If target already online, immediate sign-on notice `209 <nick> <speed>`
 - On session signon/signoff events, stalkers receive `209` / `210`
+- Loop-suppression payload/counters are transient and cleared when the user
+  disconnects; persisted entries are not deleted by this cleanup
 
 ## Channels and Messaging
 
@@ -294,6 +301,17 @@ Legend:
 - `Later`: abrupt client disconnect cleanup (shares removed)
 
 ## Suggested Test Organization
+
+### Session resource regression checks
+
+- `OutboundMessageQueueTests`: virtual writer preserves packet order; shutdown
+  interrupts a blocked writer, releases queued messages and rejects later sends;
+  invalidation before start cannot restart the writer; idle timeout invalidates it.
+- `SessionStatusSchedulerTests`: cancelled callbacks are removed immediately,
+  repeated start calls schedule once, stopping one session leaves others active,
+  and an invalid outbound queue cancels that session's updates.
+- `HotlistHandlerTests`: disconnect releases the user's loop-detection state
+  without removing another user's state or blocking a later reconnect.
 
 ### Opt-in external workload checks
 

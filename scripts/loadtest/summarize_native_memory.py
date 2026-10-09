@@ -87,10 +87,11 @@ parts += ['<h2>Method and limits</h2>', '<p>' + html.escape(data['metadata']['me
           '''<p>The 100-user idle phase lasts 70 seconds and includes periodic statistics. Other active phases last
           15–30 seconds. Startup/account creation/sharing are measured but reported separately from active latency.
           Slow reading is a bounded browse experiment; this run does not prove the maximum size of server queues.</p>''',
-          '''<p>Current DEBUG packet logging and SQL printing were preserved. Fresh accounts remain only in the isolated
+          '''<p>The executable's compiled logging defaults were used. Fresh accounts remain only in the isolated
           database for each case. Each test server was stopped after its case. The load client ran on the same machine
           but was measured as a separate process. Existing desktop activity can affect timings.</p>''',
           '<p>Source HEAD: <code>' + html.escape(data['metadata']['git_commit']) + '</code><br>'
+          'Source working tree modified: ' + str(data['metadata'].get('git_worktree_dirty', 'not recorded')) + '<br>'
           'Existing native binary SHA-256: <code>' + data['metadata']['binary_sha256'] + '</code><br>'
           'Binary modified: ' + data['metadata']['binary_modified_at'] + '<br>'
           'Host: ' + html.escape(data['metadata']['platform']) + ', '

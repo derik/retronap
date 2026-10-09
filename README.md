@@ -239,6 +239,18 @@ Linux process memory, and generates an HTML report.
 
 ## Configuration Files
 
+Normal runs use `INFO` application logging with Hibernate SQL printing disabled,
+including the Docker profile. Enable packet-level diagnostics only when needed:
+
+```bash
+java -jar build/libs/retronap-0.0.1-SNAPSHOT.jar \
+  --logging.level.com.deriklima.retronap=DEBUG --spring.jpa.show-sql=true
+```
+
+The same options work with the native executable. Session readers and writers
+use virtual threads, while periodic statistics share one server timer. This
+avoids allocating two platform threads for each logged-in user.
+
 - `src/main/resources/application.yml`: main runtime config
 - `src/main/resources/application-docker.yml`: docker profile overrides
 - `src/main/resources/configs/motd.txt`: MOTD lines

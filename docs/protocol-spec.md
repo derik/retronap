@@ -47,6 +47,14 @@ Typical session:
 5. Client sends feature messages (hotlist/share/search/browse/channel/etc.).
 6. Session closes.
 
+Outbound packets retain FIFO order through one virtual-thread writer per session.
+Closing or timing out the writer invalidates its queue and discards pending
+packets; later sends to that queue are rejected. Periodic statistics (`214`) use
+a shared server timer, with the first update 60 seconds after scheduling at
+login and subsequent updates every 60 seconds. Repeated MOTD requests do not
+create duplicate timers. Disconnect cancels the session's timer and releases
+its pending callback without stopping timers for other sessions.
+
 ## Message Reference (Implemented/Used Flows)
 The list below focuses on message types exercised in current integration tests and commonly used in RetroNap.
 
@@ -142,6 +150,9 @@ Filename matching:
 - Parsed `LINESPEED` and `BITRATE` fields currently do not filter matches.
 
 ## Validation and Compatibility Notes
+- Hotlist-create loop detection is transient: its per-user payload/counters are
+  released on disconnect. Persistent hotlist entries and normal presence
+  notification semantics are unchanged.
 - Message validity is enforced using token counts in `MessageTypes`.
 - Message types marked with `VARIABLETOKENS` bypass fixed token-count checks.
 - Search uses case-insensitive filename substring matching as described in Flow E; parsed optional filters remain placeholders.

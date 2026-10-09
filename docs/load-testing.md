@@ -166,6 +166,22 @@ These short host runs are useful for comparisons, but do not establish maximum
 capacity, container memory requirements or absence of long-term leaks. Retained
 RSS after disconnect may include heap capacity and allocator pages.
 
+After rebuilding the native executable with your changes and collecting another
+matrix, compare the two directories:
+
+```bash
+python3 -B scripts/loadtest/compare_native_memory.py \
+  build/benchmarks/native-BEFORE build/benchmarks/native-AFTER
+```
+
+This creates `comparison.html` and `comparison.json` in the second directory,
+including RSS changes, OS threads, log sizes, operation counts and latencies.
+It requires matching scenarios/parameters and successful runs with no workload
+errors. Preserve the original result directory before rebuilding, and do not
+run a compiler or another load test concurrently with measurements. The collector
+records the binary hash and whether the source working tree has modifications;
+HEAD alone does not identify an executable built from uncommitted changes.
+
 ## Timing and concurrency
 
 Each run has a `baseline` pause followed by one or more cycles:

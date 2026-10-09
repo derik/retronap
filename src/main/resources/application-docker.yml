@@ -1,6 +1,6 @@
 logging:
   level:
-    com.deriklima.retronap: DEBUG
+    com.deriklima.retronap: INFO
     org.flywaydb.core.internal.scanner.classpath.ClassPathScanner: ERROR
 
 retronap:

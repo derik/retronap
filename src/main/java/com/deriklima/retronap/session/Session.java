@@ -20,9 +20,7 @@ import java.io.InputStream;
 import java.net.Socket;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ScheduledFuture;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -45,6 +43,7 @@ public class Session implements Runnable, MessageContext {
   private final RetroNapConfig config;
   private final ApplicationEventPublisher eventPublisher;
   private final SharedFileService sharedFileService;
+  private final SessionStatusScheduler statusScheduler;
   private Socket socket;
 
   /**
@@ -54,7 +53,8 @@ public class Session implements Runnable, MessageContext {
   private OutboundMessageQueue outboundMessageQueue;
 
   private long timeAtWhichConnected;
-  private ScheduledExecutorService statusUpdateExecutor;
+  private ScheduledFuture<?> statusUpdateTask;
+  private boolean terminated;
 
   public Session(
       UserState userState,
@@ -62,13 +62,15 @@ public class Session implements Runnable, MessageContext {
       MessageHandlerFactory messageHandlerFactory,
       RetroNapConfig config,
       ApplicationEventPublisher eventPublisher,
-      SharedFileService sharedFileService) {
+      SharedFileService sharedFileService,
+      SessionStatusScheduler statusScheduler) {
     this.userState = userState;
     this.messageFactory = messageFactory;
     this.messageHandlerFactory = messageHandlerFactory;
     this.config = config;
     this.eventPublisher = eventPublisher;
     this.sharedFileService = sharedFileService;
+    this.statusScheduler = statusScheduler;
   }
 
   public void init(Socket socket) throws IOException {
@@ -127,9 +129,12 @@ public class Session implements Runnable, MessageContext {
 
   private void cleanup() {
     log.debug("Cleaning up session...");
-    eventPublisher.publishEvent(new SessionEvent(this, SessionEvent.TERMINATE));
-    stopStatusUpdateThread();
+    synchronized (this) {
+      terminated = true;
+      stopStatusUpdateThread();
+    }
     outboundMessageQueue.invalidate();
+    eventPublisher.publishEvent(new SessionEvent(this, SessionEvent.TERMINATE));
     getUserState().removeStatistics();
     cleanUpSharedFiled();
     log.debug("Session clean up. Socket closed: {}", socket.isClosed());
@@ -220,43 +225,32 @@ public class Session implements Runnable, MessageContext {
     return getUserState().search(params);
   }
 
-  public void startStatusUpdateThread() {
-    if (statusUpdateExecutor == null) {
-      statusUpdateExecutor = Executors.newSingleThreadScheduledExecutor();
+  public synchronized void startStatusUpdateThread() {
+    if (statusUpdateTask == null && !terminated) {
       MessageHandler statusHandler =
           messageHandlerFactory.getHandlerForType(MessageTypes.SERVER_STATS);
 
-      statusUpdateExecutor.scheduleAtFixedRate(
-          () -> {
-            try {
-              OutboundMessageQueue out = getOutboundMessageQueue();
-              if (out == null || out.isInvalid()) {
-                stopStatusUpdateThread();
-              } else {
-                statusHandler.handleMessage(null, this);
-              }
-            } catch (Exception e) {
-              log.error("Error in status update thread", e);
-            }
-          },
-          60,
-          60,
-          TimeUnit.SECONDS);
+      statusUpdateTask =
+          statusScheduler.schedule(
+              () -> {
+                try {
+                  OutboundMessageQueue out = getOutboundMessageQueue();
+                  if (out == null || out.isInvalid()) {
+                    stopStatusUpdateThread();
+                  } else {
+                    statusHandler.handleMessage(null, this);
+                  }
+                } catch (Exception e) {
+                  log.error("Error in status update thread", e);
+                }
+              });
     }
   }
 
-  public void stopStatusUpdateThread() {
-    if (statusUpdateExecutor != null) {
-      statusUpdateExecutor.shutdown();
-      try {
-        if (!statusUpdateExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
-          statusUpdateExecutor.shutdownNow();
-        }
-      } catch (InterruptedException e) {
-        statusUpdateExecutor.shutdownNow();
-        Thread.currentThread().interrupt();
-      }
-      statusUpdateExecutor = null;
+  public synchronized void stopStatusUpdateThread() {
+    if (statusUpdateTask != null) {
+      statusUpdateTask.cancel(false);
+      statusUpdateTask = null;
     }
   }
 

@@ -235,6 +235,8 @@ def main():
         'started_at': now(), 'platform': platform.platform(), 'logical_cpus': os.cpu_count(),
         'cpu_affinity': sorted(os.sched_getaffinity(0)), 'meminfo_start_kib': numeric_fields('/proc/meminfo'),
         'git_commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
+        'git_worktree_dirty': bool(subprocess.check_output(
+            ['git', 'status', '--porcelain'], cwd=ROOT, text=True).strip()),
         'binary_path': str(BINARY), 'binary_bytes': BINARY.stat().st_size,
         'binary_modified_at': datetime.fromtimestamp(BINARY.stat().st_mtime, timezone.utc).isoformat(),
         'binary_sha256': hashlib.file_digest(BINARY.open('rb'), 'sha256').hexdigest(),
