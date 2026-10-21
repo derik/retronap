@@ -1,0 +1,185 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Build-and-test version, without the v prefix (never publishes)'
+        required: true
+        default: '0.0.1-smoke'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: Build JAR and Linux x64 native archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set release version
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref_name }}
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]; then
+            echo "Expected a tag such as v1.2.3 or v1.2.3-alpha.1" >&2
+            exit 1
+          fi
+          echo "RELEASE_VERSION=${RELEASE_TAG#v}" >> "$GITHUB_ENV"
+
+      - name: Set up Java 25
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: gradle
+
+      - name: Test and build executable JAR
+        run: ./gradlew --no-daemon clean build bootJar -PreleaseVersion="$RELEASE_VERSION"
+
+      - name: Stage executable JAR
+        run: |
+          mkdir -p build/release
+          cp "build/libs/retronap-${RELEASE_VERSION}.jar" build/release/
+
+      - name: Build native compiler image
+        run: |
+          docker build --platform linux/amd64 \
+            -f docker/native-builder.Dockerfile \
+            -t retronap-native-builder docker
+
+      - name: Compile native executable
+        run: |
+          docker run --rm --platform linux/amd64 \
+            --user "$(id -u):$(id -g)" \
+            --entrypoint /bin/sh \
+            -e GRADLE_USER_HOME=/workspace/.gradle-home/container \
+            -e ORG_GRADLE_PROJECT_releaseVersion="$RELEASE_VERSION" \
+            -v "$PWD:/workspace" -w /workspace \
+            retronap-native-builder \
+            -c './gradlew --no-daemon --project-cache-dir .gradle/container nativeCompile --rerun-tasks'
+
+      - name: Package native executable and companion libraries
+        run: |
+          package="retronap-${RELEASE_VERSION}-linux-x64"
+          mkdir -p "build/package/$package"
+          test -x build/native/nativeCompile/retronap
+          cp build/native/nativeCompile/retronap "build/package/$package/"
+          find build/native/nativeCompile -maxdepth 1 -name '*.so*' \
+            -exec cp -L -t "build/package/$package/" {} +
+          cp LICENSE "build/package/$package/"
+          tar -czf "build/release/$package.tar.gz" -C build/package "$package"
+
+      - name: Generate checksums
+        working-directory: build/release
+        run: sha256sum ./*.jar ./*.tar.gz > SHA256SUMS
+
+      - name: Store release files
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-files
+          path: build/release/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+  smoke:
+    name: Test packaged ${{ matrix.distribution }}
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        distribution: [jar, native]
+    steps:
+      - name: Check out test scripts
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Java 25
+        if: matrix.distribution == 'jar'
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Download release files
+        uses: actions/download-artifact@v8
+        with:
+          name: release-files
+          path: release
+
+      - name: Verify checksums
+        working-directory: release
+        run: sha256sum --check SHA256SUMS
+
+      - name: Smoke-test packaged application
+        env:
+          DISTRIBUTION: ${{ matrix.distribution }}
+        run: |
+          python3 scripts/ci/smoke-release.py \
+            --distribution "$DISTRIBUTION" --artifacts release \
+            --output "build/release-smoke/$DISTRIBUTION"
+
+      - name: Store smoke-test logs and reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: smoke-${{ matrix.distribution }}
+          path: build/release-smoke/${{ matrix.distribution }}/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  publish:
+    name: Publish GitHub Release
+    needs: smoke
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download release files
+        uses: actions/download-artifact@v8
+        with:
+          name: release-files
+          path: release
+
+      - name: Verify checksums
+        working-directory: release
+        run: sha256sum --check SHA256SUMS
+
+      - name: Create release with both distributions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          flags=()
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+            flags+=(--prerelease)
+          fi
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --title "RetroNap ${GITHUB_REF_NAME#v}" \
+            --generate-notes \
+            "${flags[@]}" \
+            release/*.jar release/*.tar.gz release/SHA256SUMS

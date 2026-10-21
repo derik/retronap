@@ -337,6 +337,31 @@ exhaustive conformance suite. Socket closure is performed by the client; databas
 cleanup is not directly asserted. See [`load-testing.md`](load-testing.md) for
 the on-demand commands, lifecycle, persistence side effects and limitations.
 
+### Packaged release smoke checks
+
+The Release workflow runs `scripts/ci/smoke-release.py` separately against the
+downloaded executable JAR and extracted Linux x64 native archive. Checksums must
+match before either application starts. Each runs outside the source checkout
+with a fresh file-backed H2 database and dynamically selected ports.
+
+- Startup must finish within 60 seconds, with both TCP listeners reachable and
+  the metaserver returning the configured `127.0.0.1:<server-port>` line.
+- The external mixed workload runs two cycles, with two users and three files
+  per user. The second cycle uses normal login for the accounts registered in
+  the first cycle. All external workload assertions listed above apply.
+- Both cycles must finish successfully, with completed registration, normal
+  login, sharing, search, browse, hotlist, channel-chat, and private-message
+  operations. Missing operation coverage fails the check.
+- The application must remain running throughout the workload and create its
+  isolated database file. The harness stops it and removes the temporary
+  database afterwards, including on failure.
+- Either artifact failing blocks publication. Manual workflow runs perform the
+  same checks without publishing; logs and JSON reports remain downloadable.
+
+This is bounded release validation of existing contracts. It does not assert
+full protocol conformance, database cleanup semantics, or compatibility with
+every target host and client environment.
+
 ### Integration test organization
 
 1. `AuthFlowsIT`

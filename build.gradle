@@ -8,7 +8,7 @@ plugins {
 }
 
 group = 'com.deriklima'
-version = '0.0.1-SNAPSHOT'
+version = providers.gradleProperty('releaseVersion').getOrElse('0.0.1-SNAPSHOT')
 description = 'RetroNap server'
 
 java {
@@ -21,6 +21,8 @@ graalvmNative {
     toolchainDetection = true
     binaries {
         main {
+            // Avoid requiring newer CPU instructions on VPS hosts.
+            buildArgs.add('-march=compatibility')
             javaLauncher = javaToolchains.launcherFor {
                 languageVersion = JavaLanguageVersion.of(25)
                 vendor = JvmVendorSpec.GRAAL_VM
@@ -86,8 +88,8 @@ tasks.named('bootBuildImage') {
     environment = [
             "BP_NATIVE_IMAGE": "true",
             "BP_JVM_VERSION": "25",
-            "BP_NATIVE_IMAGE_VERSION": "25.*"
-            // "BP_NATIVE_IMAGE_BUILD_ARGUMENTS": "--initialize-at-build-time=java.beans.Introspector\$1,groovyjarjarasm.asm.Type,groovyjarjarasm.asm.Handle,nz.net.ultraq.thymeleaf.layoutdialect.LayoutDialect,groovy.lang.GroovySystem"
+            "BP_NATIVE_IMAGE_VERSION": "25.*",
+            "BP_NATIVE_IMAGE_BUILD_ARGUMENTS": "-march=compatibility"
     ]
     builder = "paketobuildpacks/builder-jammy-base"
 }

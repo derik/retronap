@@ -3,7 +3,10 @@
 `scripts/loadtest/retronap_load.py` exercises an **already running** RetroNap
 server over TCP. It works with the native executable, JAR, or container. It never
 starts the server, reads its database, or changes its settings. Nothing in this
-directory is connected to Gradle's `test`, `check`, or `build` tasks or CI.
+directory is connected to Gradle's `test`, `check`, or `build` tasks. The Release
+workflow invokes a small instance of the mixed workload through
+`scripts/ci/smoke-release.py`, which starts each packaged artifact with its own
+temporary database and stops it afterwards. Other workloads remain opt-in.
 
 Requires Python **3.11+**, with no additional packages. Run commands from the
 repository root. `--port` is the Napster server port, not the metaserver port.

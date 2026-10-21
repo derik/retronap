@@ -168,6 +168,14 @@ search, browse, hotlist, and channel/private messages. See
 [`load-testing.md`](load-testing.md) for parameters and assertions. No new wire
 messages or server behavior are introduced by this client.
 
+The Release workflow uses this client through `scripts/ci/smoke-release.py` to
+check the packaged JAR and extracted native distribution before publishing.
+Each artifact runs outside the checkout with a fresh temporary database. Two
+mixed-workload cycles exercise registration, normal login, directory sharing,
+search, browse, hotlist, and channel/private messages. Readiness also requires
+the metaserver to return the configured `127.0.0.1:<server-port>` line. These
+checks exercise existing behavior and introduce no new wire semantics.
+
 `UserJourneyTests` currently covers:
 - Login and MOTD.
 - Full channel list request/response.

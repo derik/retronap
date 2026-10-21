@@ -218,6 +218,92 @@ Default image tag is configured in `build.gradle` as:
 
 - `derikjl/retronap:0.0.1-alpha`
 
+## Releases
+
+The [Release workflow](.github/workflows/release.yml) runs when you push a version
+tag such as `v0.0.1` or `v0.0.1-alpha.1`. It runs the normal build and tests,
+compiles a Linux x64 native executable using the
+[Docker native builder](docker/native-builder.Dockerfile), and publishes a
+GitHub Release with generated release notes and these assets:
+
+- `retronap-<version>.jar`: executable Spring Boot JAR; requires Java 25.
+- `retronap-<version>-linux-x64.tar.gz`: native executable, companion `.so`
+  libraries (if generated), and license inside a matching top-level directory.
+  Requires Linux x64 with glibc 2.28 or newer; Java is not required.
+- `SHA256SUMS`: SHA-256 checksums for both downloads.
+
+The tag supplies the Gradle version through `-PreleaseVersion`, so you do not
+need to edit the default `0.0.1-SNAPSHOT` version in `build.gradle` for each
+release. Tags with a suffix such as `-alpha.1` or `-rc.1` are marked as GitHub
+prereleases. Use `vMAJOR.MINOR.PATCH` for a stable release. The workflow uses the
+built-in `GITHUB_TOKEN`; no additional release secret is needed.
+
+Commit and push all intended release changes first, including the workflow and
+`docker/native-builder.Dockerfile`, then tag that commit:
+
+```bash
+git tag -a v0.0.1-alpha.1 -m "RetroNap 0.0.1-alpha.1"
+git push origin v0.0.1-alpha.1
+```
+
+Monitor the Release run in GitHub Actions. After both builds succeed, downloads
+are tested in separate JAR and native jobs before publication. Each job verifies
+checksums, launches the packaged application outside the checkout with a fresh
+temporary database and dynamically selected ports, checks the server and
+metaserver, and runs two short mixed-workload cycles with two users and three
+files per user. Registration, subsequent login, sharing, search, browse, hotlist,
+channel chat, and private-message delivery must all succeed. Both jobs must pass
+before downloads appear on the repository's Releases page. Logs and JSON reports
+are retained as `smoke-jar` and `smoke-native` Actions artifacts for seven days,
+including on failure. Use a new version tag for each release; the workflow does
+not overwrite existing releases.
+The Docker image tag is configured separately and this workflow does not publish
+container images.
+
+For a build-and-test run without publishing, open **Actions → Release → Run
+workflow**, select a branch, and enter a version without the `v` prefix (default:
+`0.0.1-smoke`). The workflow must first be present on the default branch for the
+Run workflow button to appear. Manual runs build and test both distributions and
+leave the downloadable `release-files` artifact in Actions; they never create a
+GitHub Release. The artifact is retained for seven days. Publishing happens only
+on version-tag pushes.
+
+To run the same smoke check locally after downloading and extracting the
+`release-files` Actions artifact into `release/`, use Python 3.12+ and, for the
+JAR, Java 25:
+
+```bash
+cd release
+sha256sum --check SHA256SUMS
+cd ..
+python3 scripts/ci/smoke-release.py --distribution jar \
+  --artifacts release --output build/release-smoke/jar
+python3 scripts/ci/smoke-release.py --distribution native \
+  --artifacts release --output build/release-smoke/native
+```
+
+Each invocation stops its server and deletes its temporary database when done.
+These checks cover startup and a bounded protocol workload; they do not replace
+testing with the real Napster client or on the target VPS.
+
+To verify downloaded assets, place them alongside `SHA256SUMS` and run:
+
+```bash
+sha256sum --check SHA256SUMS
+```
+
+For example, extract and run the native distribution with:
+
+```bash
+tar -xzf retronap-0.0.1-alpha.1-linux-x64.tar.gz
+cd retronap-0.0.1-alpha.1-linux-x64
+./retronap
+```
+
+Keep the companion libraries beside the executable. The default database path
+is relative to the working directory; use an absolute `RETRONAP_FILE_DATABASE`
+path to retain the same database when switching release directories.
+
 ## On-Demand Load Tests
 
 Simulate users against an already running native, JAR, or container server with
@@ -229,8 +315,9 @@ python3 scripts/loadtest/retronap_load.py --host 127.0.0.1 --port 8888 \
   --output build/loadtest/mixed.json
 ```
 
-These workloads run only when explicitly invoked; they are not part of Gradle
-`test`, `check`, `build`, or CI. They create persistent synthetic accounts by
+These workloads are not part of Gradle `test`, `check`, or `build`. The Release
+workflow runs the small isolated smoke check described above; other workloads
+run only when explicitly invoked. They create persistent synthetic accounts by
 default, so use a benchmark server/database. See [the load-testing guide](docs/load-testing.md)
 for idle/share/search/browse/hotlist/chat scenarios, reusable accounts, repeated
 cycles, slow readers, parameters, and memory-measurement examples. The guide also
