@@ -519,6 +519,10 @@ Contract distilled from this flow:
 
 ### Derived Tests from OF-TRANSFER-001
 1. `transfer_downloadRequest_routes_uploadRequest_to_uploader`
+- After sharing, await the uploader's own `211` browse response and `213`
+  terminator before sending `203` from the downloader connection. Sharing has no
+  acknowledgment, and commands on different TCP connections have no global
+  processing order. This barrier establishes the existing-file precondition.
 - Send `203` from downloader for existing uploader file.
 - Assert uploader receives `607` with downloader nick + filename.
 

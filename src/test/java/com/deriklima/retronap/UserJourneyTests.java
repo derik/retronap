@@ -396,6 +396,7 @@ class UserJourneyTests {
         TestClient searchClient = connectClient()) {
       loginAndDrainMotd(sharerClient, sharer, DEFAULT_PASSWORD);
       send(sharerClient, MessageTypes.CLIENT_DIR_SHARE_NOTIFICATION, payload.toString());
+      assertOwnSharesReady(sharerClient, sharer, 120);
 
       loginAndDrainMotd(searchClient, searcher, DEFAULT_PASSWORD);
       send(
@@ -608,6 +609,9 @@ class UserJourneyTests {
           MessageTypes.CLIENT_SHARE_NOTIFICATION,
           "%s %s 2048 192 44100 180".formatted(file, md5));
 
+      // A different TCP connection can overtake the share. Confirm it on the uploader first.
+      assertOwnSharesReady(uploaderClient, uploader, 1);
+
       send(downloaderClient, MessageTypes.CLIENT_DOWNLOAD_REQUEST, uploader + " \"" + file + "\"");
       Message uploadRequest =
           readNextOfType(uploaderClient, MessageTypes.SERVER_UPLOAD_REQUEST, 40);
@@ -674,9 +678,7 @@ class UserJourneyTests {
           targetClient,
           MessageTypes.CLIENT_SHARE_NOTIFICATION,
           "%s %s 8192 256 44100 220".formatted(file, md5));
-      assertTrue(
-          waitForBrowseHit(requesterClient, target, file),
-          "Expected browse hit before alt download");
+      assertOwnSharesReady(targetClient, target, 1);
 
       send(requesterClient, MessageTypes.CLIENT_ALT_DOWNLOAD_REQUEST, target + " \"" + file + "\"");
       Message altAck = readNextOfType(targetClient, MessageTypes.SERVER_ALT_DOWNLOAD_ACK, 30);
@@ -924,27 +926,27 @@ class UserJourneyTests {
     throw new AssertionError("Search did not terminate with 202");
   }
 
-  private boolean waitForBrowseHit(TestClient requester, String targetNick, String file)
-      throws IOException, InterruptedException {
-    for (int attempt = 0; attempt < 5; attempt++) {
-      send(requester, MessageTypes.CLIENT_BROWSE_USER_FILES, targetNick);
-      boolean found = false;
-      for (int i = 0; i < 40; i++) {
-        Message msg = readNext(requester);
-        if (msg.getType() == MessageTypes.SERVER_BROWSE_USER_RESPONSE
-            && msg.getDataString().contains(file)) {
-          found = true;
-        }
-        if (msg.getType() == MessageTypes.SERVER_BROWSE_USER_END_RESPONSE) {
-          break;
-        }
+  private void assertOwnSharesReady(TestClient sharer, String nickname, int expectedFiles)
+      throws IOException {
+    // This same-connection browse is processed after all preceding share notifications.
+    send(sharer, MessageTypes.CLIENT_BROWSE_USER_FILES, nickname);
+    int files = 0;
+    for (int i = 0; i < expectedFiles + 40; i++) {
+      Message msg = readNext(sharer);
+      if (msg.getType() == MessageTypes.SERVER_BROWSE_USER_RESPONSE) {
+        files++;
+      } else if (msg.getType() == MessageTypes.SERVER_BROWSE_USER_END_RESPONSE) {
+        assertEquals(nickname, msg.getDataString());
+        assertEquals(expectedFiles, files, "Expected all shares before another client uses them");
+        return;
+      } else {
+        assertTrue(
+            msg.getType() == MessageTypes.MESSAGE_OF_THE_DAY
+                || msg.getType() == MessageTypes.SERVER_STATS,
+            "Unexpected message while waiting for shares: " + msg);
       }
-      if (found) {
-        return true;
-      }
-      Thread.sleep(100);
     }
-    return false;
+    throw new AssertionError("Browse did not terminate with 213");
   }
 
   private void assertNoMessageOfType(TestClient client, int unexpectedType, long windowMillis)
