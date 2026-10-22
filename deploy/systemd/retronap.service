@@ -1,0 +1,27 @@
+[Unit]
+Description=RetroNap server
+After=network.target
+
+[Service]
+Type=simple
+User=retronap
+Group=retronap
+WorkingDirectory=/var/lib/retronap
+StateDirectory=retronap
+StateDirectoryMode=0750
+EnvironmentFile=/etc/retronap/retronap.env
+ExecStart=/opt/retronap/retronap
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=60s
+UMask=0077
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=retronap
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+
+[Install]
+WantedBy=multi-user.target

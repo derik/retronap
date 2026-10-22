@@ -1,67 +1,203 @@
 # RetroNap
 
-RetroNap is a Napster server implementation focused on compatibility with the legacy **Napster 2.0 Beta 6** client.
-
-This project is **not** a general-purpose Napster/OpenNap server for multiple client generations.
+A server for the classic **Napster 2.0 Beta 6** client, with accounts, chat
+channels, private messages, hotlists, file sharing, search, and download/upload
+coordination. Other Napster client versions are not currently supported.
 
 [![Java CI with Gradle](https://github.com/derik/retronap/actions/workflows/gradle.yml/badge.svg)](https://github.com/derik/retronap/actions/workflows/gradle.yml)
 
-## Client Compatibility
+## Quick start
 
-RetroNap currently targets only:
+Download a release, start the server, and point your Napster client at it.
+RetroNap includes its own database and default configuration; you do not need
+to build the project or install a database service.
 
-- `Napster 2.0 Beta 6`
+### 1. Download the server
 
-Other Napster client versions are not supported right now and will not work with this server.
-Support for additional versions may be implemented in the future.
+Open [GitHub Releases](https://github.com/derik/retronap/releases) and download
+**one** of these assets from the release you want to use:
 
-Client download:
+| Download | Use it when… | Requirements |
+| --- | --- | --- |
+| `retronap-<version>-linux-x64.tar.gz` | Running the native executable on Linux x64 (x86-64) | glibc 2.28 or newer; no Java installation needed |
+| `retronap-<version>.jar` | Running with Java, including on other operating systems or CPU architectures | Java 25; check with `java -version` |
 
-- https://www.oldversion.com/software/napster/napster-2-0-beta-6/
+`<version>` is the release number, including any suffix such as `-alpha.1`.
+Choose the packaged asset under **Assets**, rather than GitHub's source-code
+archives. Run the server on a modern machine; the legacy Napster client can run
+on a separate computer or in a VM.
 
-## What It Provides
+### 2. Start the server
 
-- Login/authentication flow compatible with Napster 2.0 Beta 6
-- MOTD, channels, private messaging, hotlist
-- Share, browse, and search flows
-- Download/upload coordination messages
-- Persistent embedded H2 database (users, shares, channels, etc.)
-
-## Requirements
-
-- Java `25`
-- Docker and Docker Compose (only for building and running the container image)
-
-## Quick Start (Local)
-
-From the repository root, start the server:
+**Native executable:** extract the `.tar.gz` archive and open a terminal in the
+extracted `retronap-<version>-linux-x64` directory, then run:
 
 ```bash
-./gradlew bootRun
+./retronap
 ```
 
-H2 creates `./data/retronap.mv.db` on first startup. Flyway initializes the schema and
-Hibernate validates it. No database service or storage profile is needed.
+Keep any companion `.so` libraries in that directory beside the executable.
 
-Default ports:
+**JAR:** save the downloaded JAR as `retronap.jar`, open a terminal in that
+directory, then run:
 
-- `8888` (RetroNap server)
-- `8875` (metaserver)
+```bash
+java -jar retronap.jar
+```
 
-Stop the server with `Ctrl+C`. Restarting it uses the same database file.
+On first startup, RetroNap creates `data/retronap.mv.db` in your current
+directory and initializes it automatically. The default TCP ports are **8888**
+for the Napster server and **8875** for the metaserver, which tells clients where
+to connect. Leave the terminal open while using the server. Stop with `Ctrl+C`;
+starting it again from the same directory reuses your database.
 
-## Docker Setup
+### 3. Connect a Napster client
 
-Run these commands from the repository root. Build the image from the current source
-before starting Compose:
+Install [Napster 2.0 Beta 6](https://www.oldversion.com/software/napster/napster-2-0-beta-6/)
+on the client computer or VM.
+
+**If the client is on another computer or in a VM**, stop the server and restart
+it with the address that the client can reach. Replace `192.168.1.50` below with
+your server's LAN or public IP address. Use the command for your download:
+
+```bash
+./retronap --retronap.metaserver.server-list=192.168.1.50:8888
+```
+
+```bash
+java -jar retronap.jar --retronap.metaserver.server-list=192.168.1.50:8888
+```
+
+The default advertised address is `127.0.0.1:8888`, which only works when the
+client and server run in the same operating system. Inside a VM, `127.0.0.1`
+points to the VM itself.
+
+On the **client computer**, edit its hosts file and add these two lines using
+the same server IP:
+
+```text
+192.168.1.50 server.napster.com
+192.168.1.50 napster.com
+```
+
+| Client OS | Hosts file |
+| --- | --- |
+| Windows 98 SE | `C:\WINDOWS\HOSTS` |
+| Windows XP and later | `C:\WINDOWS\system32\drivers\etc\hosts` |
+
+Save the file without a `.txt` extension, using administrator permissions where
+required. If the client and server run in the same OS, use `127.0.0.1` in both
+entries instead. Allow incoming **TCP 8875 and 8888** through the server's
+firewall and any router or VPS firewall between it and the client.
+
+Start or restart Napster and **register a new account on your server**. You can
+then log in, join a channel, and share or search for files.
+
+If the Windows 98 client reverts your hosts-file changes, see the
+[project notes and workaround](https://deriklima.com/projects/retronap/).
+
+## Optional configuration
+
+The bundled settings are enough for a local run. For clients on other machines,
+the advertised server address above is the main setting to change.
+
+Both distributions accept command-line options such as
+`--retronap.metaserver.server-list=192.168.1.50:8888`. For persistent deployment
+settings, you can also set environment variables before starting the process:
+
+| Environment variable | Default | Purpose |
+| --- | --- | --- |
+| `RETRONAP_METASERVER_SERVERLIST` | `127.0.0.1:8888` | Server address and port advertised to clients |
+| `RETRONAP_SERVER_PORT` | `8888` | Napster server TCP port |
+| `RETRONAP_METASERVER_PORT` | `8875` | Metaserver TCP port |
+| `RETRONAP_FILE_DATABASE` | `./data/retronap` | Database path **without** the `.mv.db` extension |
+| `RETRONAP_FILE_DATABASE_USERNAME` | `sa` | Embedded H2 database user |
+| `RETRONAP_FILE_DATABASE_PASSWORD` | empty | Embedded H2 database password |
+
+If you change the server port, update the port in the advertised address too.
+Keep the default ports for the standard Napster client setup above.
+
+Database credentials are separate from Napster accounts. They initialize a new
+database; reopening an existing database requires its existing credentials.
+Changing these variables does not change the credentials stored in the file.
+
+## Data, upgrades, and backups
+
+H2 is the only supported database. Its file lives at `data/retronap.mv.db` by
+default, relative to the directory where you start the server. That directory
+must be writable by the user running RetroNap. Only **one server process** can
+open a database file at a time.
+
+For a long-lived installation, set `RETRONAP_FILE_DATABASE` to an absolute path
+so that switching release directories does not create an empty database. For
+example, on Linux, after preparing a writable `/var/lib/retronap` directory:
+
+```bash
+RETRONAP_FILE_DATABASE=/var/lib/retronap/retronap ./retronap
+```
+
+Use the same variable with `java -jar retronap.jar` for the JAR distribution.
+To upgrade, stop the server, back up its database, replace the JAR or the native
+executable and its companion libraries, then restart using the same database
+path and credentials.
+
+### Backup and restore
+
+Stop RetroNap before copying or replacing the database file. Back up
+`data/retronap.mv.db` (or your configured path plus `.mv.db`) and retain its
+credentials with your deployment configuration. To restore, copy the backup
+back while the server is stopped, ensure the server user can read and write the
+file and its parent directory, then restart.
+
+Accounts and other stored records survive restarts. Shared-file listings are
+removed when their owner disconnects and are supplied again by the client.
+
+### Run as a service
+
+For an Ubuntu VPS that should start RetroNap automatically and keep it running,
+follow the [systemd setup guide](docs/systemd.md). It covers the native
+executable, service user, database migration, logs, updates, and backups. The
+service and environment templates are in [deploy/systemd](deploy/systemd);
+download those separately from the native release archive.
+
+### Verify a download
+
+Releases include `SHA256SUMS`. With GNU `sha256sum` on Linux, place it beside
+your downloaded asset and run this **before renaming the JAR**:
+
+```bash
+sha256sum --check --ignore-missing SHA256SUMS
+```
+
+Check that your chosen asset reports `OK`. `--ignore-missing` lets you verify
+one distribution without downloading the other.
+
+## Troubleshooting
+
+| Problem | What to check |
+| --- | --- |
+| Napster cannot connect | Use Beta 6, check the hosts file on the client, allow TCP 8875/8888, and advertise an IP reachable from that client. A VM needs a reachable host address, not loopback. |
+| `Address already in use` | Another process is using one of the ports. Stop the previous RetroNap instance or choose unused ports. |
+| Database is locked or not writable | Stop other instances using that file and check ownership and permissions on the file and its parent directory. |
+| Accounts appear to be missing after an upgrade | Check the working directory and `RETRONAP_FILE_DATABASE`; you may have started with a different database. |
+| JAR reports an unsupported Java/class version | Check `java -version` and run with Java 25. |
+| Native executable reports a CPU ISA or glibc error | Check the Linux x64/glibc requirements above. Use the JAR with Java 25 or see the [native build compatibility guide](docs/development.md#native-builds-and-vps-compatibility). |
+
+## Docker
+
+Docker is an optional **source-build** route. The release workflow publishes
+the native archive and JAR; it does not publish a container image. From a source
+checkout with JDK 25 and Docker installed and running:
 
 ```bash
 ./gradlew bootBuildImage
 mkdir -p data
 ```
 
-The image runs as a non-root user. On Linux, make the data directory and any existing
-database files writable by that user. Obtain its IDs from the image you just built:
+This builds `derikjl/retronap:0.0.1-alpha`, the image used by
+[docker/compose.yaml](docker/compose.yaml). The image runs as a non-root user.
+On Linux, make the data directory and any existing database files writable by
+that user:
 
 ```bash
 RETRONAP_CONTAINER_UID=$(docker run --rm --entrypoint id derikjl/retronap:0.0.1-alpha -u)
@@ -69,283 +205,60 @@ RETRONAP_CONTAINER_GID=$(docker run --rm --entrypoint id derikjl/retronap:0.0.1-
 sudo chown -R "$RETRONAP_CONTAINER_UID:$RETRONAP_CONTAINER_GID" data
 ```
 
-If using Docker Desktop, ensure the repository directory is available for bind mounts
-and writable from the container. Compose requires `data` to exist; it does not create
-a root-owned directory automatically.
+With Docker Desktop, ensure the checkout is available for bind mounts and
+writable from the container. Compose requires `data` to exist.
 
-Start the application container:
+For remote or VM clients, **edit `RETRONAP_METASERVER_SERVERLIST` in
+`docker/compose.yaml`** to use the Docker host's reachable IP and port `8888`.
+The file currently sets it to `127.0.0.1:8888`; exporting a variable in your
+shell does not override that literal value. Then start the container:
 
 ```bash
 docker compose -f docker/compose.yaml up -d
 ```
 
-Compose uses the locally built image and exposes ports `8888` and `8875`. It mounts
-`./data` from the repository at `/var/lib/retronap`, where H2 creates `retronap.mv.db`.
-The file survives container removal and recreation. The H2 credential variables
-listed below are also passed through to the container.
-
-Stop the container:
+Follow [the client setup](#3-connect-a-napster-client) using that same IP.
+Compose exposes both ports and stores the database in the checkout's `data/`
+directory, mounted at `/var/lib/retronap`. It also passes through the database
+username and password variables listed above.
 
 ```bash
+docker compose -f docker/compose.yaml logs -f
 docker compose -f docker/compose.yaml down
 ```
 
-Local and Docker startup use the same file by default. Stop one before starting the
-other, and adjust file ownership back to your local user if necessary.
+Stopping or removing the container keeps the database. Local source runs and
+Compose share this file by default: stop one before starting the other, and
+restore ownership to your local user if needed.
 
-## Hosts File Setup (Required for Napster Client)
+## For developers
 
-To make the Napster 2.0 Beta 6 client connect to your RetroNap server, you need to edit the OS hosts file and map Napster hostnames to your RetroNap server IP.
-
-Example entries (replace `192.168.1.50` with your RetroNap server IP):
-
-```text
-192.168.1.50 server.napster.com
-192.168.1.50 napster.com
-```
-
-### Windows 98 SE example
-
-Hosts file location:
-
-- `C:\WINDOWS\HOSTS`
-
-Steps:
-
-1. Open `C:\WINDOWS\HOSTS` in a text editor.
-2. Add the mapping lines shown above.
-3. Save the file and start the client.
-
-Important note for Windows 98 SE:
-The Napster client may overwrite/revert hosts file changes when it starts. For workaround details, see:
-
-- https://deriklima.com/projects/retronap/
-
-### Windows XP example
-
-Hosts file location:
-
-- `C:\WINDOWS\system32\drivers\etc\hosts`
-
-Steps:
-
-1. Open the file as Administrator.
-2. Add the mapping lines shown above.
-3. Save and restart the Napster client.
-
-## Local Development Setup
-
-Run the server with Gradle:
+Install **JDK 25**, then clone the repository and start from source:
 
 ```bash
+git clone https://github.com/derik/retronap.git
+cd retronap
 ./gradlew bootRun
 ```
 
-Default RetroNap server settings come from `src/main/resources/application.yml`:
+The Gradle wrapper is included; on Windows, use `gradlew.bat` instead of
+`./gradlew`. Client connection and database settings are the same as above.
 
-- server port: `8888`
-- metaserver port: `8875`
+| Task | Command |
+| --- | --- |
+| Build and run checks | `./gradlew clean build` |
+| Run tests only | `./gradlew test` |
+| Check Java formatting | `./gradlew spotlessCheck` |
+| Build an executable JAR | `./gradlew bootJar` |
+| Build a native executable (GraalVM for Java 25 and a C toolchain required) | `./gradlew nativeCompile` |
 
-## Database Configuration
+The default JAR is `build/libs/retronap-0.0.1-SNAPSHOT.jar`. Tests use isolated
+H2 databases and do not require Docker or touch your local database.
 
-H2 is the only supported database. Configure it with:
-
-| Environment variable | Default | Meaning |
-| --- | --- | --- |
-| `RETRONAP_FILE_DATABASE` | `./data/retronap` | Local database basename, without `.mv.db` |
-| `RETRONAP_FILE_DATABASE_USERNAME` | `sa` | H2 database user |
-| `RETRONAP_FILE_DATABASE_PASSWORD` | empty | H2 database password |
-
-Relative paths are resolved from the process working directory. An absolute path is
-useful when launching from different directories. The parent directory must be writable
-by the application user. For example, after preparing the directory:
-
-```bash
-RETRONAP_FILE_DATABASE=/var/lib/retronap/retronap \
-./gradlew bootRun
-```
-
-This creates `/var/lib/retronap/retronap.mv.db`. Credentials initialize a new database;
-when reopening an existing file, supply its existing credentials. Changing the environment
-variables does not change credentials stored in that file.
-
-Only one application process may open a database file at a time. H2 runs embedded,
-without a database server or automatic mixed mode. File databases created by the earlier
-H2 configuration remain usable at the same path, with their migration history preserved.
-
-### Backup and Restore
-
-Stop the application before copying or replacing the database file. For the default
-location, copy `data/retronap.mv.db` to your backup location. Keep its credentials with
-your deployment configuration. To restore, stop the application, copy the backup back to
-the configured basename plus `.mv.db`, and ensure the application user can read and write
-the file and its parent directory before restarting.
-
-Normal startup and container recreation retain stored records. Session cleanup still
-removes a disconnecting user's shared-file records according to the protocol lifecycle.
-Database files and H2 diagnostic files are ignored by Git.
-
-## Building
-
-Build and run tests:
-
-```bash
-./gradlew clean build
-```
-
-Most tests use isolated in-memory H2 databases with the production migrations from
-`db/migration` and Hibernate schema validation. File-database tests use temporary
-directories to verify persistence after reopening and migration compatibility. Tests
-do not touch the local database or require Docker. To run only tests:
-
-```bash
-./gradlew test
-```
-
-Check Java formatting:
-
-```bash
-./gradlew spotlessCheck
-```
-
-Build container image with Spring Boot:
-
-```bash
-./gradlew bootBuildImage
-```
-
-Default image tag is configured in `build.gradle` as:
-
-- `derikjl/retronap:0.0.1-alpha`
-
-## Releases
-
-The [Release workflow](.github/workflows/release.yml) runs when you push a version
-tag such as `v0.0.1` or `v0.0.1-alpha.1`. It runs the normal build and tests,
-compiles a Linux x64 native executable using the
-[Docker native builder](docker/native-builder.Dockerfile), and publishes a
-GitHub Release with generated release notes and these assets:
-
-- `retronap-<version>.jar`: executable Spring Boot JAR; requires Java 25.
-- `retronap-<version>-linux-x64.tar.gz`: native executable, companion `.so`
-  libraries (if generated), and license inside a matching top-level directory.
-  Requires Linux x64 with glibc 2.28 or newer; Java is not required.
-- `SHA256SUMS`: SHA-256 checksums for both downloads.
-
-The tag supplies the Gradle version through `-PreleaseVersion`, so you do not
-need to edit the default `0.0.1-SNAPSHOT` version in `build.gradle` for each
-release. Tags with a suffix such as `-alpha.1` or `-rc.1` are marked as GitHub
-prereleases. Use `vMAJOR.MINOR.PATCH` for a stable release. The workflow uses the
-built-in `GITHUB_TOKEN`; no additional release secret is needed.
-
-Commit and push all intended release changes first, including the workflow and
-`docker/native-builder.Dockerfile`, then tag that commit:
-
-```bash
-git tag -a v0.0.1-alpha.1 -m "RetroNap 0.0.1-alpha.1"
-git push origin v0.0.1-alpha.1
-```
-
-Monitor the Release run in GitHub Actions. After both builds succeed, downloads
-are tested in separate JAR and native jobs before publication. Each job verifies
-checksums, launches the packaged application outside the checkout with a fresh
-temporary database and dynamically selected ports, checks the server and
-metaserver, and runs two short mixed-workload cycles with two users and three
-files per user. Registration, subsequent login, sharing, search, browse, hotlist,
-channel chat, and private-message delivery must all succeed. Both jobs must pass
-before downloads appear on the repository's Releases page. Logs and JSON reports
-are retained as `smoke-jar` and `smoke-native` Actions artifacts for seven days,
-including on failure. Use a new version tag for each release; the workflow does
-not overwrite existing releases.
-The Docker image tag is configured separately and this workflow does not publish
-container images.
-
-For a build-and-test run without publishing, open **Actions → Release → Run
-workflow**, select a branch, and enter a version without the `v` prefix (default:
-`0.0.1-smoke`). The workflow must first be present on the default branch for the
-Run workflow button to appear. Manual runs build and test both distributions and
-leave the downloadable `release-files` artifact in Actions; they never create a
-GitHub Release. The artifact is retained for seven days. Publishing happens only
-on version-tag pushes.
-
-To run the same smoke check locally after downloading and extracting the
-`release-files` Actions artifact into `release/`, use Python 3.12+ and, for the
-JAR, Java 25:
-
-```bash
-cd release
-sha256sum --check SHA256SUMS
-cd ..
-python3 scripts/ci/smoke-release.py --distribution jar \
-  --artifacts release --output build/release-smoke/jar
-python3 scripts/ci/smoke-release.py --distribution native \
-  --artifacts release --output build/release-smoke/native
-```
-
-Each invocation stops its server and deletes its temporary database when done.
-These checks cover startup and a bounded protocol workload; they do not replace
-testing with the real Napster client or on the target VPS.
-
-To verify downloaded assets, place them alongside `SHA256SUMS` and run:
-
-```bash
-sha256sum --check SHA256SUMS
-```
-
-For example, extract and run the native distribution with:
-
-```bash
-tar -xzf retronap-0.0.1-alpha.1-linux-x64.tar.gz
-cd retronap-0.0.1-alpha.1-linux-x64
-./retronap
-```
-
-Keep the companion libraries beside the executable. The default database path
-is relative to the working directory; use an absolute `RETRONAP_FILE_DATABASE`
-path to retain the same database when switching release directories.
-
-## On-Demand Load Tests
-
-Simulate users against an already running native, JAR, or container server with
-Python 3.11+ (no extra packages):
-
-```bash
-python3 scripts/loadtest/retronap_load.py --host 127.0.0.1 --port 8888 \
-  --scenario mixed --users 5 --files 100 --duration 60 \
-  --output build/loadtest/mixed.json
-```
-
-These workloads are not part of Gradle `test`, `check`, or `build`. The Release
-workflow runs the small isolated smoke check described above; other workloads
-run only when explicitly invoked. They create persistent synthetic accounts by
-default, so use a benchmark server/database. See [the load-testing guide](docs/load-testing.md)
-for idle/share/search/browse/hotlist/chat scenarios, reusable accounts, repeated
-cycles, slow readers, parameters, and memory-measurement examples. The guide also
-includes an opt-in native benchmark runner that starts isolated servers, samples
-Linux process memory, and generates an HTML report.
-
-## Configuration Files
-
-Normal runs use `INFO` application logging with Hibernate SQL printing disabled,
-including the Docker profile. Enable packet-level diagnostics only when needed:
-
-```bash
-java -jar build/libs/retronap-0.0.1-SNAPSHOT.jar \
-  --logging.level.com.deriklima.retronap=DEBUG --spring.jpa.show-sql=true
-```
-
-The same options work with the native executable. Session readers and writers
-use virtual threads, while periodic statistics share one server timer. This
-avoids allocating two platform threads for each logged-in user.
-
-- `src/main/resources/application.yml`: main runtime config
-- `src/main/resources/application-docker.yml`: docker profile overrides
-- `src/main/resources/configs/motd.txt`: MOTD lines
-- `src/main/resources/configs/channels.txt`: permanent channels and required level
-
-## Protocol Documentation
-
-- `docs/protocol-spec.md`
-- `docs/protocol-conformance-spec.md`
-
-These docs describe the implemented wire behavior and testable conformance expectations.
+- [Developer guide](docs/development.md): native build recipes and portability,
+  configuration resources, logging, release tags, GitHub Actions, and smoke tests.
+- [Load-testing guide](docs/load-testing.md): opt-in workloads and memory benchmarks.
+- [Protocol specification](docs/protocol-spec.md) and
+  [conformance specification](docs/protocol-conformance-spec.md): canonical
+  references for implemented wire behavior and test expectations. Consult both
+  before protocol work and update the documentation alongside any behavior change.
