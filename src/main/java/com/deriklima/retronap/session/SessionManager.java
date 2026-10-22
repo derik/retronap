@@ -36,6 +36,9 @@ public class SessionManager implements ShareProvider {
   }
 
   public MessageContext searchForSession(String nickname) {
+    if (nickname == null) {
+      return null;
+    }
     return activeSessions.stream()
         .filter(s -> s != null && nickname.equals(s.getNickname()))
         .findFirst()

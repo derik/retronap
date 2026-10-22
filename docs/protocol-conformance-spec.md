@@ -170,6 +170,12 @@ Use these status tags when planning tests:
 
 2. `401 CLIENT_CHANNEL_LEAVE` (`Implemented`)
 - Removes membership and broadcasts `407`
+- Membership updates and recipient snapshots are synchronized across joins,
+  leaves, and disconnect cleanup. A broadcast may observe a member who has just
+  disconnected and skip the missing session; it must not observe a null member
+  produced by a concurrent collection copy or emit `0 Server Error` for it.
+- Creating/joining a channel waits for an in-progress last-member deletion, so
+  the new membership and channel row remain consistent.
 
 3. `402 CLIENT_CHANNEL_PUBLIC_MESSAGE` (`Implemented`)
 - Broadcasts `403 <channel> <sender> <text>`
@@ -304,6 +310,11 @@ Legend:
 
 ### Session resource regression checks
 
+- `ChannelManagerTests`: a disconnect cannot mutate the membership set during
+  recipient copying; a join waits for the previous last member's channel
+  deletion before recreating it.
+- `SessionManagerTests`: null lookup targets return no session, including when
+  unauthenticated and authenticated sessions coexist.
 - `OutboundMessageQueueTests`: virtual writer preserves packet order; shutdown
   interrupts a blocked writer, releases queued messages and rejects later sends;
   invalidation before start cannot restart the writer; idle timeout invalidates it.

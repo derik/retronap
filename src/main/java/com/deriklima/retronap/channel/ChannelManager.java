@@ -17,7 +17,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -45,6 +45,7 @@ public class ChannelManager implements UserChannelProvider {
   public static final int USER_INITIATED = 0;
   public static final int NON_USER_INITIATED = 1;
   private static final Logger logger = LoggerFactory.getLogger(ChannelManager.class);
+  // Guard both membership indexes and channel creation/deletion with this manager's monitor.
   private final Map<String, Set<String>> channelMembers = new HashMap<>();
   private final Map<String, Set<String>> users = new HashMap<>(); // username to channel names
   private final SessionManager sessionManager;
@@ -115,7 +116,7 @@ public class ChannelManager implements UserChannelProvider {
   }
 
   /** Adds a user to a channel (join) */
-  public void addUserToChannel(String channel, String user) {
+  public synchronized void addUserToChannel(String channel, String user) {
     Channel c = getChannel(channel);
     if (c == null) // doesnt exist yet
     {
@@ -139,10 +140,10 @@ public class ChannelManager implements UserChannelProvider {
       endListMsgType = MessageTypes.CLIENT_CHANNEL_USER_LIST;
     }
 
-    Set<String> members = channelMembers.get(channel);
-    if (members != null && !members.isEmpty()) {
+    List<String> members = membersSnapshot(channel);
+    if (!members.isEmpty()) {
       OutboundMessageQueue queue = s.getOutboundMessageQueue();
-      for (String singleMember : new ArrayList<>(members)) {
+      for (String singleMember : members) {
         MessageContext memberMessageContext = sessionManager.searchForSession(singleMember);
         if (memberMessageContext != null) {
           Long numShares = sharedFileService.countByUserId(memberMessageContext.getUserId());
@@ -185,7 +186,7 @@ public class ChannelManager implements UserChannelProvider {
   }
 
   /** Removes a user from a channel */
-  public void removeUserFromChannel(String channel, String user) {
+  public synchronized void removeUserFromChannel(String channel, String user) {
     Channel c = getChannel(channel);
     Set<String> members = channelMembers.get(channel);
     if (members != null) {
@@ -217,11 +218,11 @@ public class ChannelManager implements UserChannelProvider {
 
   /** variation of sendMessage(), takes a preconstructed msg and broadcasts to channel */
   public void sendMessage(String channel, Message msg) {
-    Set<String> members = channelMembers.get(channel);
-    if (members == null || members.isEmpty()) {
+    List<String> members = membersSnapshot(channel);
+    if (members.isEmpty()) {
       return;
     }
-    for (String member : new ArrayList<>(members)) {
+    for (String member : members) {
       MessageContext targetMessageContext = sessionManager.searchForSession(member);
       if (targetMessageContext != null) {
         OutboundMessageQueue queue = targetMessageContext.getOutboundMessageQueue();
@@ -235,9 +236,9 @@ public class ChannelManager implements UserChannelProvider {
 
   /** Returns array of channels that user is currently a member of. */
   public Channel[] getChannelsForUser(String user) {
-    Set<String> channelList = users.get(user);
-    if (channelList != null && !channelList.isEmpty()) {
-      return channelList.stream()
+    String[] channelList = getChannelNamesForUser(user);
+    if (channelList.length > 0) {
+      return Arrays.stream(channelList)
           .map(this::getChannel)
           .filter(c -> c != null)
           .toArray(Channel[]::new);
@@ -259,7 +260,7 @@ public class ChannelManager implements UserChannelProvider {
     return channelRepository.findById(channel).orElse(null);
   }
 
-  public void addChannel(Channel channel) {
+  public synchronized void addChannel(Channel channel) {
     if (channel == null || channel.getName() == null || channel.getName().isBlank()) {
       return;
     }
@@ -269,7 +270,7 @@ public class ChannelManager implements UserChannelProvider {
     channelRepository.save(channel);
   }
 
-  public void removeChannel(Channel channel) {
+  public synchronized void removeChannel(Channel channel) {
     if (channel == null || channel.getName() == null) {
       return;
     }
@@ -290,7 +291,7 @@ public class ChannelManager implements UserChannelProvider {
   }
 
   @Override
-  public String[] getChannelNamesForUser(String user) {
+  public synchronized String[] getChannelNamesForUser(String user) {
     Set<String> channelList = users.get(user);
     if (channelList != null && !channelList.isEmpty()) {
       return channelList.toArray(new String[0]);
@@ -307,8 +308,13 @@ public class ChannelManager implements UserChannelProvider {
     return false;
   }
 
-  public int numMembers(String channelName) {
+  public synchronized int numMembers(String channelName) {
     return channelMembers.getOrDefault(channelName, Collections.emptySet()).size();
+  }
+
+  private synchronized List<String> membersSnapshot(String channelName) {
+    Set<String> members = channelMembers.get(channelName);
+    return members == null ? List.of() : List.copyOf(members);
   }
 
   /** Listens for session terminate events; removes the user from all channels */

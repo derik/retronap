@@ -5,6 +5,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import re
 import signal
 import socket
 import subprocess
@@ -80,6 +81,22 @@ def prepare_command(distribution, artifacts, workspace):
     return [str(binaries[0])], binaries[0].parent
 
 
+def print_failure_logs(output):
+    for filename in ("server.log", "client.log"):
+        path = output / filename
+        if not path.exists():
+            continue
+        lines = path.read_text(errors="replace").splitlines()
+        if filename == "server.log":
+            first_error = next((i for i, line in enumerate(lines) if " ERROR " in line), None)
+            if first_error is not None and first_error < len(lines) - 40:
+                end = next((i for i in range(first_error + 1, len(lines))
+                            if re.match(r"^\d{4}-\d{2}-\d{2}T", lines[i])), len(lines))
+                print(f"First server error in {path}:\n" + "\n".join(
+                    lines[first_error:min(end, first_error + 80)]), file=sys.stderr)
+        print(f"Last lines of {path}:\n" + "\n".join(lines[-40:]), file=sys.stderr)
+
+
 def smoke(args):
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -142,11 +159,14 @@ def smoke(args):
     except Exception as error:
         summary.update(status="failed", error=str(error))
         print(f"{args.distribution} smoke test failed: {error}", file=sys.stderr)
-        for filename in ("server.log", "client.log"):
-            path = output / filename
-            if path.exists():
-                print(f"Last lines of {path}:\n" + "\n".join(
-                    path.read_text(errors="replace").splitlines()[-40:]), file=sys.stderr)
+        if report_path.exists():
+            try:
+                summary["workload_errors"] = json.loads(report_path.read_text()).get("errors", [])
+                for error_message in summary["workload_errors"]:
+                    print(f"Protocol workload error: {error_message}", file=sys.stderr)
+            except (OSError, ValueError):
+                pass
+        print_failure_logs(output)
     finally:
         (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     print(f"{args.distribution} smoke test: {summary['status']}; logs: {output}", flush=True)

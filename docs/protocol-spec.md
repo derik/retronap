@@ -150,6 +150,12 @@ Filename matching:
 - Parsed `LINESPEED` and `BITRATE` fields currently do not filter matches.
 
 ## Validation and Compatibility Notes
+- Channel joins, leaves, and disconnect cleanup update membership indexes under
+  one lock. Broadcasts and user-list responses copy recipient names under that
+  same lock, then resolve sessions and send outside it. Concurrent disconnects
+  must not introduce null recipients or cause a successful join to lose its
+  channel to an in-progress last-member deletion. A null session-lookup target
+  is treated as absent.
 - Hotlist-create loop detection is transient: its per-user payload/counters are
   released on disconnect. Persistent hotlist entries and normal presence
   notification semantics are unchanged.
